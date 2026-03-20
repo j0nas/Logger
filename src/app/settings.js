@@ -1,12 +1,12 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import {
   View, Text, ScrollView, Pressable, TextInput, StyleSheet, Alert, Share,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import { colors, spacing } from '../src/theme';
-import { getTrackers, createTracker, updateTracker, exportAllLogs } from '../src/db/database';
+import { colors, spacing } from '../theme';
+import { useTrackers } from '../hooks/useTrackers';
+import { useExportLogs } from '../hooks/useLogs';
 
 const TRACKER_TYPES = [
   { value: 'medication', label: 'Medication', icon: '💊' },
@@ -18,19 +18,14 @@ const ICON_OPTIONS = ['💊', '🏃', '💪', '🧘', '💧', '😴', '☕', '�
 const COLOR_OPTIONS = ['#8b5cf6', '#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#ec4899', '#14b8a6', '#f97316'];
 
 export default function SettingsScreen() {
-  const [trackers, setTrackers] = useState([]);
+  const { trackers, create, update } = useTrackers();
+  const getExportData = useExportLogs();
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState('');
   const [type, setType] = useState('custom');
   const [icon, setIcon] = useState('📝');
   const [color, setColor] = useState('#6366f1');
   const [optionsText, setOptionsText] = useState('');
-
-  const load = useCallback(async () => {
-    setTrackers(await getTrackers());
-  }, []);
-
-  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const handleCreate = async () => {
     if (!name.trim()) return Alert.alert('Name required');
@@ -43,14 +38,13 @@ export default function SettingsScreen() {
       config.options = options;
     }
 
-    await createTracker({ name: name.trim(), type, icon, color, config });
+    await create({ name: name.trim(), type, icon, color, config });
     setName('');
     setType('custom');
     setIcon('📝');
     setColor('#6366f1');
     setOptionsText('');
     setShowAdd(false);
-    load();
   };
 
   const handleArchive = (tracker) => {
@@ -59,19 +53,13 @@ export default function SettingsScreen() {
       'It will be hidden from the log screen.',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Archive', style: 'destructive',
-          onPress: async () => {
-            await updateTracker(tracker.id, { archived: 1 });
-            load();
-          },
-        },
+        { text: 'Archive', style: 'destructive', onPress: () => update(tracker.id, { archived: 1 }) },
       ]
     );
   };
 
   const handleExport = async (format) => {
-    const logs = await exportAllLogs();
+    const logs = await getExportData();
     let content, filename;
 
     if (format === 'csv') {

@@ -1,10 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import {
   View, Text, ScrollView, Pressable, StyleSheet, Alert, RefreshControl,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
-import { colors, spacing } from '../src/theme';
-import { getLogs, deleteLog, getTrackers } from '../src/db/database';
+import { colors, spacing } from '../theme';
+import { useTrackers } from '../hooks/useTrackers';
+import { useLogs } from '../hooks/useLogs';
 
 function formatDate(dateStr) {
   const d = new Date(dateStr);
@@ -29,45 +29,28 @@ function groupByDate(logs) {
     if (!groups[day]) groups[day] = [];
     groups[day].push(log);
   }
-  return Object.entries(groups).map(([day, entries]) => ({
+  return Object.entries(groups).map(([, entries]) => ({
     label: formatDate(entries[0].logged_at),
     entries,
   }));
 }
 
 export default function HistoryScreen() {
-  const [logs, setLogs] = useState([]);
-  const [trackers, setTrackers] = useState([]);
   const [filter, setFilter] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-
-  const load = useCallback(async () => {
-    const [l, t] = await Promise.all([
-      getLogs({ trackerId: filter, limit: 200 }),
-      getTrackers(),
-    ]);
-    setLogs(l);
-    setTrackers(t);
-  }, [filter]);
-
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  const { trackers } = useTrackers();
+  const { logs, reload, remove } = useLogs({ trackerId: filter, limit: 200 });
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await load();
+    await reload();
     setRefreshing(false);
   };
 
   const handleDelete = (log) => {
     Alert.alert('Delete entry?', `${log.tracker_icon} ${log.tracker_name}${log.value ? ` — ${log.value}` : ''}`, [
       { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive',
-        onPress: async () => {
-          await deleteLog(log.id);
-          load();
-        },
-      },
+      { text: 'Delete', style: 'destructive', onPress: () => remove(log.id) },
     ]);
   };
 

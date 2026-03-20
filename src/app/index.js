@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, Pressable, ScrollView, Modal, TextInput,
   StyleSheet, Animated, RefreshControl,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
-import { colors, spacing } from '../src/theme';
-import { getTrackers, addLog, getLastLog } from '../src/db/database';
+import { colors, spacing } from '../theme';
+import { useTrackers } from '../hooks/useTrackers';
+import { useLogs, useLastLog } from '../hooks/useLogs';
 
 function timeAgo(dateStr) {
   if (!dateStr) return '';
@@ -20,13 +20,9 @@ function timeAgo(dateStr) {
 }
 
 function TrackerButton({ tracker, onPress, justLogged }) {
-  const [lastLog, setLastLog] = useState(null);
+  const lastLog = useLastLog(tracker.id, justLogged);
   const scale = useRef(new Animated.Value(1)).current;
   const glow = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    getLastLog(tracker.id).then(setLastLog);
-  }, [tracker.id, justLogged]);
 
   useEffect(() => {
     if (justLogged) {
@@ -65,7 +61,6 @@ function TrackerButton({ tracker, onPress, justLogged }) {
 function OptionPicker({ tracker, visible, onClose, onSelect }) {
   const [note, setNote] = useState('');
   const config = tracker?.config || {};
-
   const options = config.doses || config.options || [];
   const defaultVal = config.defaultDose;
 
@@ -75,12 +70,7 @@ function OptionPicker({ tracker, visible, onClose, onSelect }) {
     onClose();
   };
 
-  if (!tracker) return null;
-
-  // If no options configured, log directly
-  if (options.length === 0) {
-    return null;
-  }
+  if (!tracker || options.length === 0) return null;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -120,22 +110,16 @@ function OptionPicker({ tracker, visible, onClose, onSelect }) {
 }
 
 export default function LogScreen() {
-  const [trackers, setTrackers] = useState([]);
+  const { trackers, reload } = useTrackers();
+  const { add } = useLogs();
   const [pickerTracker, setPickerTracker] = useState(null);
   const [justLoggedId, setJustLoggedId] = useState(null);
   const [toast, setToast] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadTrackers = useCallback(async () => {
-    const t = await getTrackers();
-    setTrackers(t);
-  }, []);
-
-  useFocusEffect(useCallback(() => { loadTrackers(); }, [loadTrackers]));
-
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadTrackers();
+    await reload();
     setRefreshing(false);
   };
 
@@ -144,7 +128,6 @@ export default function LogScreen() {
     const options = config.doses || config.options || [];
 
     if (options.length === 0) {
-      // No options — log immediately (lowest friction!)
       doLog(tracker.id, null, null, tracker);
     } else {
       setPickerTracker(tracker);
@@ -152,7 +135,7 @@ export default function LogScreen() {
   };
 
   const doLog = async (trackerId, value, note, tracker) => {
-    await addLog(trackerId, value, note);
+    await add(trackerId, value, note);
     tracker = tracker || trackers.find(t => t.id === trackerId);
     setJustLoggedId(trackerId);
     setToast(`${tracker?.icon} ${tracker?.name}${value ? ` — ${value}` : ''}`);
