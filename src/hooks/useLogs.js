@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect } from 'expo-router';
+import { syncWidgetData } from '../lib/widgetSync';
 
 export function useLogs({ trackerId, limit } = {}) {
   const db = useSQLiteContext();
@@ -21,16 +22,19 @@ export function useLogs({ trackerId, limit } = {}) {
   useFocusEffect(useCallback(() => { reload(); }, [reload]));
 
   const add = useCallback(async (tId, value, note) => {
-    await db.runAsync(
+    const result = await db.runAsync(
       `INSERT INTO logs (tracker_id, value, note, logged_at) VALUES (?, ?, ?, ?)`,
       tId, value || null, note || null, new Date().toISOString()
     );
     await reload();
+    syncWidgetData(db);
+    return result.lastInsertRowId;
   }, [db, reload]);
 
   const remove = useCallback(async (id) => {
     await db.runAsync(`DELETE FROM logs WHERE id = ?`, id);
     await reload();
+    syncWidgetData(db);
   }, [db, reload]);
 
   return { logs, reload, add, remove };

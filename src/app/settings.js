@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import {
   View, Text, ScrollView, Pressable, TextInput, StyleSheet, Alert, Share,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { colors, spacing } from '../theme';
@@ -16,6 +18,14 @@ const TRACKER_TYPES = [
 
 const ICON_OPTIONS = ['💊', '🏃', '💪', '🧘', '💧', '😴', '☕', '📝', '🎯', '⭐', '🧠', '❤️'];
 const COLOR_OPTIONS = ['#8b5cf6', '#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#ec4899', '#14b8a6', '#f97316'];
+
+function csvEscape(val) {
+  const s = String(val ?? '');
+  if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
 
 export default function SettingsScreen() {
   const { trackers, create, update } = useTrackers();
@@ -38,6 +48,7 @@ export default function SettingsScreen() {
       config.options = options;
     }
 
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     await create({ name: name.trim(), type, icon, color, config });
     setName('');
     setType('custom');
@@ -48,6 +59,7 @@ export default function SettingsScreen() {
   };
 
   const handleArchive = (tracker) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert(
       `Archive ${tracker.name}?`,
       'It will be hidden from the log screen.',
@@ -59,151 +71,171 @@ export default function SettingsScreen() {
   };
 
   const handleExport = async (format) => {
-    const logs = await getExportData();
-    let content, filename;
+    try {
+      const logs = await getExportData();
+      let content, filename;
 
-    if (format === 'csv') {
-      const header = 'timestamp,tracker,type,value,note';
-      const rows = logs.map(l =>
-        `${l.logged_at},${l.tracker},${l.type},${(l.value || '').replace(/,/g, ';')},${(l.note || '').replace(/,/g, ';')}`
-      );
-      content = [header, ...rows].join('\n');
-      filename = 'logger-export.csv';
-    } else {
-      content = JSON.stringify(logs, null, 2);
-      filename = 'logger-export.json';
-    }
+      if (format === 'csv') {
+        const header = 'timestamp,tracker,type,value,note';
+        const rows = logs.map(l =>
+          [l.logged_at, l.tracker, l.type, l.value, l.note].map(csvEscape).join(',')
+        );
+        content = [header, ...rows].join('\n');
+        filename = 'logger-export.csv';
+      } else {
+        content = JSON.stringify(logs, null, 2);
+        filename = 'logger-export.json';
+      }
 
-    const path = FileSystem.documentDirectory + filename;
-    await FileSystem.writeAsStringAsync(path, content);
+      const path = FileSystem.documentDirectory + filename;
+      await FileSystem.writeAsStringAsync(path, content);
 
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(path);
-    } else {
-      await Share.share({ message: content });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(path);
+      } else {
+        await Share.share({ message: content });
+      }
+    } catch (e) {
+      Alert.alert('Export failed', e.message);
     }
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Trackers</Text>
-        {trackers.map(t => (
-          <Pressable
-            key={t.id}
-            style={styles.trackerRow}
-            onLongPress={() => handleArchive(t)}
-          >
-            <Text style={styles.trackerRowIcon}>{t.icon}</Text>
-            <View style={styles.trackerRowInfo}>
-              <Text style={styles.trackerRowName}>{t.name}</Text>
-              <Text style={styles.trackerRowType}>{t.type}</Text>
-            </View>
-            <View style={[styles.colorDot, { backgroundColor: t.color }]} />
-          </Pressable>
-        ))}
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={90}
+    >
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Trackers</Text>
+          {trackers.map(t => (
+            <Pressable
+              key={t.id}
+              style={styles.trackerRow}
+              onLongPress={() => handleArchive(t)}
+              accessibilityRole="button"
+              accessibilityLabel={`${t.name}, ${t.type}. Long press to archive.`}
+            >
+              <Text style={styles.trackerRowIcon}>{t.icon}</Text>
+              <View style={styles.trackerRowInfo}>
+                <Text style={styles.trackerRowName}>{t.name}</Text>
+                <Text style={styles.trackerRowType}>{t.type}</Text>
+              </View>
+              <View style={[styles.colorDot, { backgroundColor: t.color }]} />
+            </Pressable>
+          ))}
 
-        {!showAdd ? (
-          <Pressable style={styles.addBtn} onPress={() => setShowAdd(true)}>
-            <Text style={styles.addBtnText}>+ Add Tracker</Text>
-          </Pressable>
-        ) : (
-          <View style={styles.form}>
-            <View style={styles.field}>
-              <Text style={styles.label}>Name</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. Water intake"
-                placeholderTextColor={colors.textDim}
-                value={name}
-                onChangeText={setName}
-                autoFocus
-              />
-            </View>
+          {!showAdd ? (
+            <Pressable style={styles.addBtn} onPress={() => setShowAdd(true)} accessibilityRole="button">
+              <Text style={styles.addBtnText}>+ Add Tracker</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.form}>
+              <View style={styles.field}>
+                <Text style={styles.label}>Name</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. Water intake"
+                  placeholderTextColor={colors.textDim}
+                  value={name}
+                  onChangeText={setName}
+                  autoFocus
+                />
+              </View>
 
-            <View style={styles.field}>
-              <Text style={styles.label}>Type</Text>
-              <View style={styles.chipRow}>
-                {TRACKER_TYPES.map(t => (
-                  <Pressable
-                    key={t.value}
-                    style={[styles.chip, type === t.value && styles.chipActive]}
-                    onPress={() => { setType(t.value); setIcon(t.icon); }}
-                  >
-                    <Text style={[styles.chipText, type === t.value && styles.chipTextActive]}>
-                      {t.icon} {t.label}
-                    </Text>
-                  </Pressable>
-                ))}
+              <View style={styles.field}>
+                <Text style={styles.label}>Type</Text>
+                <View style={styles.chipRow}>
+                  {TRACKER_TYPES.map(t => (
+                    <Pressable
+                      key={t.value}
+                      style={[styles.chip, type === t.value && styles.chipActive]}
+                      onPress={() => { setType(t.value); setIcon(t.icon); }}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: type === t.value }}
+                    >
+                      <Text style={[styles.chipText, type === t.value && styles.chipTextActive]}>
+                        {t.icon} {t.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.field}>
+                <Text style={styles.label}>Icon</Text>
+                <View style={styles.chipRow}>
+                  {ICON_OPTIONS.map(i => (
+                    <Pressable
+                      key={i}
+                      style={[styles.iconChip, icon === i && styles.iconChipActive]}
+                      onPress={() => setIcon(i)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Icon ${i}`}
+                      accessibilityState={{ selected: icon === i }}
+                    >
+                      <Text style={styles.iconChipText}>{i}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.field}>
+                <Text style={styles.label}>Color</Text>
+                <View style={styles.chipRow}>
+                  {COLOR_OPTIONS.map(c => (
+                    <Pressable
+                      key={c}
+                      style={[styles.colorChip, { backgroundColor: c }, color === c && styles.colorChipActive]}
+                      onPress={() => setColor(c)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Color ${c}`}
+                      accessibilityState={{ selected: color === c }}
+                    />
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.field}>
+                <Text style={styles.label}>Options (comma-separated, optional)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder={type === 'medication' ? 'e.g. 5mg, 10mg, 20mg' : 'e.g. Run, Bike, Walk'}
+                  placeholderTextColor={colors.textDim}
+                  value={optionsText}
+                  onChangeText={setOptionsText}
+                />
+              </View>
+
+              <View style={styles.formActions}>
+                <Pressable style={styles.btnPrimary} onPress={handleCreate} accessibilityRole="button">
+                  <Text style={styles.btnPrimaryText}>Create</Text>
+                </Pressable>
+                <Pressable style={styles.btnSecondary} onPress={() => setShowAdd(false)} accessibilityRole="button">
+                  <Text style={styles.btnSecondaryText}>Cancel</Text>
+                </Pressable>
               </View>
             </View>
-
-            <View style={styles.field}>
-              <Text style={styles.label}>Icon</Text>
-              <View style={styles.chipRow}>
-                {ICON_OPTIONS.map(i => (
-                  <Pressable
-                    key={i}
-                    style={[styles.iconChip, icon === i && styles.iconChipActive]}
-                    onPress={() => setIcon(i)}
-                  >
-                    <Text style={styles.iconChipText}>{i}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.field}>
-              <Text style={styles.label}>Color</Text>
-              <View style={styles.chipRow}>
-                {COLOR_OPTIONS.map(c => (
-                  <Pressable
-                    key={c}
-                    style={[styles.colorChip, { backgroundColor: c }, color === c && styles.colorChipActive]}
-                    onPress={() => setColor(c)}
-                  />
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.field}>
-              <Text style={styles.label}>Options (comma-separated, optional)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder={type === 'medication' ? 'e.g. 5mg, 10mg, 20mg' : 'e.g. Run, Bike, Walk'}
-                placeholderTextColor={colors.textDim}
-                value={optionsText}
-                onChangeText={setOptionsText}
-              />
-            </View>
-
-            <View style={styles.formActions}>
-              <Pressable style={styles.btnPrimary} onPress={handleCreate}>
-                <Text style={styles.btnPrimaryText}>Create</Text>
-              </Pressable>
-              <Pressable style={styles.btnSecondary} onPress={() => setShowAdd(false)}>
-                <Text style={styles.btnSecondaryText}>Cancel</Text>
-              </Pressable>
-            </View>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Data</Text>
-        <View style={styles.exportRow}>
-          <Pressable style={styles.btnSecondary} onPress={() => handleExport('csv')}>
-            <Text style={styles.btnSecondaryText}>Export CSV</Text>
-          </Pressable>
-          <Pressable style={styles.btnSecondary} onPress={() => handleExport('json')}>
-            <Text style={styles.btnSecondaryText}>Export JSON</Text>
-          </Pressable>
+          )}
         </View>
-      </View>
 
-      <Text style={styles.hint}>Long-press a tracker to archive it</Text>
-      <View style={{ height: 40 }} />
-    </ScrollView>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Data</Text>
+          <View style={styles.exportRow}>
+            <Pressable style={styles.btnSecondary} onPress={() => handleExport('csv')} accessibilityRole="button">
+              <Text style={styles.btnSecondaryText}>Export CSV</Text>
+            </Pressable>
+            <Pressable style={styles.btnSecondary} onPress={() => handleExport('json')} accessibilityRole="button">
+              <Text style={styles.btnSecondaryText}>Export JSON</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <Text style={styles.hint}>Long-press a tracker to archive it</Text>
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

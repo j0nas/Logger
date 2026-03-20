@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, Pressable, ScrollView, Modal, TextInput,
-  StyleSheet, Animated, RefreshControl,
+  StyleSheet, Animated, RefreshControl, useWindowDimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 import { colors, spacing } from '../theme';
 import { useTrackers } from '../hooks/useTrackers';
 import { useLogs, useLastLog } from '../hooks/useLogs';
@@ -19,7 +21,7 @@ function timeAgo(dateStr) {
   return `${days}d ago`;
 }
 
-function TrackerButton({ tracker, onPress, justLogged }) {
+function TrackerButton({ tracker, onPress, justLogged, width }) {
   const lastLog = useLastLog(tracker.id, justLogged);
   const scale = useRef(new Animated.Value(1)).current;
   const glow = useRef(new Animated.Value(0)).current;
@@ -43,10 +45,14 @@ function TrackerButton({ tracker, onPress, justLogged }) {
   });
 
   return (
-    <Pressable onPress={() => onPress(tracker)}>
+    <Pressable
+      onPress={() => onPress(tracker)}
+      accessibilityRole="button"
+      accessibilityLabel={`Log ${tracker.name}${lastLog ? `, last logged ${timeAgo(lastLog.logged_at)}` : ''}`}
+    >
       <Animated.View style={[
         styles.trackerBtn,
-        { transform: [{ scale }], borderColor },
+        { width, transform: [{ scale }], borderColor },
       ]}>
         <Text style={styles.trackerIcon}>{tracker.icon}</Text>
         <Text style={styles.trackerName}>{tracker.name}</Text>
@@ -60,11 +66,13 @@ function TrackerButton({ tracker, onPress, justLogged }) {
 
 function OptionPicker({ tracker, visible, onClose, onSelect }) {
   const [note, setNote] = useState('');
+  const insets = useSafeAreaInsets();
   const config = tracker?.config || {};
   const options = config.doses || config.options || [];
   const defaultVal = config.defaultDose;
 
   const handleSelect = (value) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onSelect(tracker.id, value, note || null);
     setNote('');
     onClose();
@@ -75,7 +83,7 @@ function OptionPicker({ tracker, visible, onClose, onSelect }) {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={e => e.stopPropagation()}>
+        <Pressable style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 20) + 20 }]} onPress={e => e.stopPropagation()}>
           <Text style={styles.sheetTitle}>{tracker.icon} {tracker.name}</Text>
 
           <View style={styles.optionGrid}>
@@ -84,6 +92,8 @@ function OptionPicker({ tracker, visible, onClose, onSelect }) {
                 key={opt}
                 style={[styles.optionBtn, opt === defaultVal && styles.optionDefault]}
                 onPress={() => handleSelect(opt)}
+                accessibilityRole="button"
+                accessibilityLabel={`${opt}${opt === defaultVal ? ', default' : ''}`}
               >
                 <Text style={styles.optionText}>{opt}</Text>
               </Pressable>
@@ -109,13 +119,47 @@ function OptionPicker({ tracker, visible, onClose, onSelect }) {
   );
 }
 
+function Toast({ message, onUndo, onDismiss }) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(10)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.timing(translateY, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start();
+
+    const timer = setTimeout(() => {
+      Animated.timing(opacity, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
+        onDismiss();
+      });
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <Animated.View style={[styles.toast, { opacity, transform: [{ translateY }] }]}>
+      <Text style={styles.toastText}>{message}</Text>
+      <Pressable onPress={onUndo} hitSlop={8}>
+        <Text style={styles.toastUndo}>Undo</Text>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 export default function LogScreen() {
+  const { width: screenWidth } = useWindowDimensions();
   const { trackers, reload } = useTrackers();
-  const { add } = useLogs();
+  const { add, remove } = useLogs();
   const [pickerTracker, setPickerTracker] = useState(null);
   const [justLoggedId, setJustLoggedId] = useState(null);
   const [toast, setToast] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const busyRef = useRef(false);
+
+  // 2-column grid: screen width - padding(16*2) - gap(12), divided by 2
+  const btnWidth = (screenWidth - spacing.lg * 2 - spacing.md) / 2;
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -123,26 +167,44 @@ export default function LogScreen() {
     setRefreshing(false);
   };
 
-  const handlePress = (tracker) => {
+  const handlePress = useCallback((tracker) => {
+    if (busyRef.current) return; // double-tap guard
     const config = tracker.config || {};
     const options = config.doses || config.options || [];
 
     if (options.length === 0) {
       doLog(tracker.id, null, null, tracker);
     } else {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setPickerTracker(tracker);
+    }
+  }, []);
+
+  const doLog = async (trackerId, value, note, tracker) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+
+    try {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const logId = await add(trackerId, value, note);
+      tracker = tracker || trackers.find(t => t.id === trackerId);
+      setJustLoggedId(trackerId);
+      setToast({
+        message: `${tracker?.icon} ${tracker?.name}${value ? ` — ${value}` : ''}`,
+        logId,
+      });
+      setTimeout(() => setJustLoggedId(null), 2000);
+    } finally {
+      busyRef.current = false;
     }
   };
 
-  const doLog = async (trackerId, value, note, tracker) => {
-    await add(trackerId, value, note);
-    tracker = tracker || trackers.find(t => t.id === trackerId);
-    setJustLoggedId(trackerId);
-    setToast(`${tracker?.icon} ${tracker?.name}${value ? ` — ${value}` : ''}`);
-    setTimeout(() => {
-      setJustLoggedId(null);
-      setToast(null);
-    }, 2000);
+  const handleUndo = async () => {
+    if (toast?.logId) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      await remove(toast.logId);
+    }
+    setToast(null);
   };
 
   return (
@@ -155,6 +217,7 @@ export default function LogScreen() {
           <TrackerButton
             key={t.id}
             tracker={t}
+            width={btnWidth}
             onPress={handlePress}
             justLogged={justLoggedId === t.id}
           />
@@ -169,9 +232,12 @@ export default function LogScreen() {
       />
 
       {toast && (
-        <View style={styles.toast}>
-          <Text style={styles.toastText}>{toast}</Text>
-        </View>
+        <Toast
+          key={toast.logId}
+          message={toast.message}
+          onUndo={handleUndo}
+          onDismiss={() => setToast(null)}
+        />
       )}
     </View>
   );
@@ -189,8 +255,6 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   trackerBtn: {
-    width: '100%',
-    minWidth: 155,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: spacing.xxl,
@@ -224,7 +288,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: spacing.xl,
-    paddingBottom: 40,
   },
   sheetTitle: {
     fontSize: 18,
@@ -285,9 +348,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 30,
     alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     backgroundColor: colors.success,
     paddingVertical: 10,
-    paddingHorizontal: 24,
+    paddingLeft: 20,
+    paddingRight: 14,
     borderRadius: 100,
     shadowColor: colors.success,
     shadowOffset: { width: 0, height: 4 },
@@ -299,5 +366,11 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: '500',
+  },
+  toastUndo: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
 });

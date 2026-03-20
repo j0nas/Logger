@@ -13,9 +13,14 @@
       "backgroundColor": "#0f0f13"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.logger.app",
+      "entitlements": {
+        "com.apple.security.application-groups": ["group.com.logger.app"]
+      }
     },
     "android": {
+      "package": "com.logger.app",
       "adaptiveIcon": {
         "backgroundColor": "#0f0f13",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -29,7 +34,9 @@
     "plugins": [
       "expo-sqlite",
       "expo-router",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-haptics",
+      "@bacons/apple-targets"
     ]
   }
 }
