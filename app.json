@@ -34,9 +34,7 @@
     "plugins": [
       "expo-sqlite",
       "expo-router",
-      "expo-sharing",
-      "expo-haptics",
-      "@bacons/apple-targets"
+      "expo-sharing"
     ]
   }
 }
