@@ -16,7 +16,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.logger.app",
       "entitlements": {
-        "com.apple.security.application-groups": ["group.com.logger.app"]
+        "com.apple.security.application-groups": [
+          "group.com.logger.app"
+        ]
       }
     },
     "android": {
@@ -34,7 +36,15 @@
     "plugins": [
       "expo-sqlite",
       "expo-router",
-      "expo-sharing"
-    ]
+      "expo-sharing",
+      "@bacons/apple-targets"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "285a789c-42b8-4fe4-9206-4f33357e1b0a"
+      }
+    },
+    "owner": "j0nas"
   }
 }
