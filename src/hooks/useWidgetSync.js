@@ -3,7 +3,7 @@ import { AppState, Platform, NativeModules } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { syncWidgetData } from '../lib/widgetSync';
 
-const GROUP_ID = 'group.com.logger.app';
+const GROUP_ID = 'group.com.tali.app';
 
 // When the app comes to foreground, check if the widget logged anything
 // and sync those entries into SQLite.

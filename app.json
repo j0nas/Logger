@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "Logger",
-    "slug": "Logger",
+    "name": "Tali",
+    "slug": "Tali",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "scheme": "logger",
+    "scheme": "tali",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -14,15 +14,15 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.logger.app",
+      "bundleIdentifier": "com.tali.app",
       "entitlements": {
         "com.apple.security.application-groups": [
-          "group.com.logger.app"
+          "group.com.tali.app"
         ]
       }
     },
     "android": {
-      "package": "com.logger.app",
+      "package": "com.tali.app",
       "adaptiveIcon": {
         "backgroundColor": "#0f0f13",
         "foregroundImage": "./assets/android-icon-foreground.png",

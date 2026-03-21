@@ -1,6 +1,6 @@
 import { Platform, NativeModules } from 'react-native';
 
-const GROUP_ID = 'group.com.logger.app';
+const GROUP_ID = 'group.com.tali.app';
 
 // Syncs a lightweight snapshot to shared UserDefaults for the iOS widget.
 // This is safe — unlike sharing the SQLite file directly, UserDefaults

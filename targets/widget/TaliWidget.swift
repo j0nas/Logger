@@ -4,7 +4,7 @@ import AppIntents
 
 // MARK: - Shared Data
 
-private let groupID = "group.com.logger.app"
+private let groupID = "group.com.tali.app"
 
 struct TrackerInfo: Codable, Identifiable {
     let id: Int
@@ -83,22 +83,22 @@ struct QuickLogIntent: AppIntent {
 
 // MARK: - Timeline
 
-struct LoggerEntry: TimelineEntry {
+struct TaliEntry: TimelineEntry {
     let date: Date
     let snapshot: WidgetSnapshot?
 }
 
-struct LoggerProvider: TimelineProvider {
-    func placeholder(in context: Context) -> LoggerEntry {
-        LoggerEntry(date: .now, snapshot: nil)
+struct TaliProvider: TimelineProvider {
+    func placeholder(in context: Context) -> TaliEntry {
+        TaliEntry(date: .now, snapshot: nil)
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (LoggerEntry) -> Void) {
-        completion(LoggerEntry(date: .now, snapshot: loadSnapshot()))
+    func getSnapshot(in context: Context, completion: @escaping (TaliEntry) -> Void) {
+        completion(TaliEntry(date: .now, snapshot: loadSnapshot()))
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<LoggerEntry>) -> Void) {
-        let entry = LoggerEntry(date: .now, snapshot: loadSnapshot())
+    func getTimeline(in context: Context, completion: @escaping (Timeline<TaliEntry>) -> Void) {
+        let entry = TaliEntry(date: .now, snapshot: loadSnapshot())
         // Refresh every 30 minutes to keep "time ago" labels fresh
         let next = Calendar.current.date(byAdding: .minute, value: 30, to: .now)!
         completion(Timeline(entries: [entry], policy: .after(next)))
@@ -133,8 +133,8 @@ struct TrackerButtonView: View {
     }
 }
 
-struct LoggerWidgetSmallView: View {
-    let entry: LoggerEntry
+struct TaliWidgetSmallView: View {
+    let entry: TaliEntry
 
     var body: some View {
         if let snapshot = entry.snapshot, !snapshot.trackers.isEmpty {
@@ -167,7 +167,7 @@ struct LoggerWidgetSmallView: View {
             VStack(spacing: 8) {
                 Text("📋")
                     .font(.largeTitle)
-                Text("Open Logger")
+                Text("Open Tali")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Text("to set up")
@@ -179,8 +179,8 @@ struct LoggerWidgetSmallView: View {
     }
 }
 
-struct LoggerWidgetMediumView: View {
-    let entry: LoggerEntry
+struct TaliWidgetMediumView: View {
+    let entry: TaliEntry
 
     var body: some View {
         if let snapshot = entry.snapshot, !snapshot.trackers.isEmpty {
@@ -201,7 +201,7 @@ struct LoggerWidgetMediumView: View {
             VStack(spacing: 8) {
                 Text("📋")
                     .font(.largeTitle)
-                Text("Open Logger to set up trackers")
+                Text("Open Tali to set up trackers")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -213,13 +213,13 @@ struct LoggerWidgetMediumView: View {
 // MARK: - Widget Entry Point
 
 @main
-struct LoggerWidget: Widget {
-    let kind = "LoggerWidget"
+struct TaliWidget: Widget {
+    let kind = "TaliWidget"
 
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: LoggerProvider()) { entry in
+        StaticConfiguration(kind: kind, provider: TaliProvider()) { entry in
             if #available(iOSApplicationExtension 17.0, *) {
-                LoggerWidgetEntryView(entry: entry)
+                TaliWidgetEntryView(entry: entry)
             }
         }
         .configurationDisplayName("Quick Log")
@@ -228,18 +228,18 @@ struct LoggerWidget: Widget {
     }
 }
 
-struct LoggerWidgetEntryView: View {
+struct TaliWidgetEntryView: View {
     @Environment(\.widgetFamily) var family
-    let entry: LoggerEntry
+    let entry: TaliEntry
 
     var body: some View {
         switch family {
         case .systemSmall:
-            LoggerWidgetSmallView(entry: entry)
+            TaliWidgetSmallView(entry: entry)
         case .systemMedium:
-            LoggerWidgetMediumView(entry: entry)
+            TaliWidgetMediumView(entry: entry)
         default:
-            LoggerWidgetMediumView(entry: entry)
+            TaliWidgetMediumView(entry: entry)
         }
     }
 }

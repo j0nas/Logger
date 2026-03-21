@@ -28,7 +28,7 @@ export default function Layout() {
       <StatusBar style="light" />
       <ErrorBoundary>
         <Suspense fallback={<Loading />}>
-          <SQLiteProvider databaseName="logger.db" onInit={migrateDb} useSuspense>
+          <SQLiteProvider databaseName="tali.db" onInit={migrateDb} useSuspense>
             <WidgetSyncProvider />
             <Tabs
               screenOptions={{
@@ -48,7 +48,7 @@ export default function Layout() {
                 name="index"
                 options={{
                   title: 'Log',
-                  headerTitle: 'Logger',
+                  headerTitle: 'Tali',
                   tabBarIcon: ({ color, size }) => (
                     <Ionicons name="add-circle" size={size} color={color} />
                   ),
